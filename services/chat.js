@@ -175,5 +175,45 @@ export const ChatService = {
     } catch (error) {
       console.error('Failed to mark messages as read', error);
     }
+  },
+
+  // Set typing status
+  async setTypingStatus(senderId, recipientId, isTyping) {
+    try {
+      const chatRoomId = this.generateChatRoomId(senderId, recipientId);
+      const typingRef = doc(db, 'chats', chatRoomId, 'typing', senderId);
+      await setDoc(typingRef, {
+        isTyping,
+        timestamp: serverTimestamp()
+      });
+    } catch (error) {
+      console.error('Failed to set typing status', error);
+    }
+  },
+
+  // Listen for typing status
+  onTypingStatusChange(senderId, recipientId, recipientUserId, callback) {
+    try {
+      const chatRoomId = this.generateChatRoomId(senderId, recipientId);
+      const typingRef = doc(db, 'chats', chatRoomId, 'typing', recipientUserId);
+      return onSnapshot(typingRef, (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          const timestamp = data.timestamp?.toDate?.() || new Date(data.timestamp);
+          const now = new Date();
+          // Only trigger if status is recent (within 10 seconds)
+          if (data.isTyping && (now - timestamp) < 10000) {
+            callback(true);
+          } else {
+            callback(false);
+          }
+        } else {
+          callback(false);
+        }
+      });
+    } catch (error) {
+      console.error('Failed to listen for typing status', error);
+      return null;
+    }
   }
 };

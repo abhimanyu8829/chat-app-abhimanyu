@@ -524,9 +524,17 @@
             <i class="fas fa-search text-slate-400 mr-2 text-sm"></i>
             <input id="globalSearchInput" type="text" placeholder="Global search..."
               class="bg-transparent border-none text-sm outline-none w-full text-slate-600 dark:text-slate-300"
-              onkeypress="if(event.key === 'Enter') window.handleGlobalSearch(this.value)">
+              oninput="window.handleGlobalSearch(this.value)"
+              onkeydown="if(event.key === 'Escape') window.clearSearchResults()"
+              onblur="setTimeout(() => window.clearSearchResults(), 200)">
             <span
               class="text-[10px] font-bold text-slate-400 bg-white dark:bg-slate-700 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-600 ml-2">⌘K</span>
+
+            <!-- Global Search Results Dropdown -->
+            <div id="globalSearchResults"
+              class="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-dark-card border border-slate-200 dark:border-dark-border rounded-xl shadow-2xl z-50 hidden max-h-[400px] overflow-y-auto">
+              <!-- Results populated via JS -->
+            </div>
           </div>
 
           <div class="flex items-center gap-3">
@@ -578,7 +586,7 @@
                 </div>
                 <div
                   class="p-3 bg-slate-50 dark:bg-slate-800/50 text-center border-t border-slate-100 dark:border-dark-border">
-                  <button
+                  <button onclick="window.navigateTo('logs')"
                     class="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline uppercase tracking-tight">View
                     All Protocol Logs</button>
                 </div>
@@ -922,7 +930,7 @@
                   </button>
                   <input id="messageInput" type="text" placeholder="Shift + Enter for new line..."
                     class="flex-1 bg-transparent border-none text-sm outline-none text-slate-900 dark:text-white"
-                    onkeypress="if(event.key === 'Enter') window.sendMessage()">
+                    oninput="window.handleTyping()" onkeypress="if(event.key === 'Enter') window.sendMessage()">
                   <button onclick="window.sendMessage()"
                     class="w-10 h-10 shrink-0 bg-indigo-600 text-white rounded-lg shadow-md hover:bg-indigo-700 transition flex items-center justify-center">
                     <i class="fas fa-paper-plane text-sm"></i>
@@ -1120,20 +1128,51 @@
                 </div>
               </div>
 
-              <!-- Danger Zone -->
-              <div class="bg-rose-50 dark:bg-rose-900/10 rounded-xl border border-rose-100 dark:border-rose-900/30 p-8">
-                <h3 class="text-rose-600 dark:text-rose-400 font-bold mb-2">Critical Actions</h3>
-                <p class="text-rose-500/70 text-sm mb-6">Permanent account deconstruction. This action is IRREVERSIBLE.
-                </p>
-                <button onclick="window.deleteAccount()"
-                  class="bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 px-6 rounded-lg transition active:scale-95 shadow-lg shadow-rose-200 dark:shadow-none">
-                  Terminate Node (Delete Account)
-                </button>
-              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Protocol Logs Page -->
+        <div id="logsPage" class="hidden h-full flex flex-col animate-fade-in">
+          <div class="mb-8 flex justify-between items-end">
+            <div>
+              <h1 class="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">Protocol Logs</h1>
+              <p class="text-slate-500 mt-1 font-medium">Full system audit trail and event synchronization history.</p>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="window.loadAllLogs()" class="btn-indigo flex items-center gap-2">
+                <i class="fas fa-sync-alt"></i> Synchronize Logs
+              </button>
+            </div>
+          </div>
+
+          <div
+            class="flex-1 bg-white dark:bg-dark-card rounded-2xl border border-slate-200 dark:border-dark-border shadow-soft overflow-hidden flex flex-col">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left">
+                <thead>
+                  <tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-dark-border">
+                    <th class="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Event Type</th>
+                    <th class="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Synchronization
+                      Note</th>
+                    <th class="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Temporal Node
+                    </th>
+                  </tr>
+                </thead>
+                <tbody id="fullLogsTable" class="divide-y divide-slate-100 dark:divide-dark-border">
+                  <!-- Logs populated via JS -->
+                  <tr>
+                    <td colspan="3" class="px-6 py-12 text-center text-slate-400 italic">
+                      Initializing log synchronization stream...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
     </div>
+  </div>
   </div>
 
   <!-- Scripts -->

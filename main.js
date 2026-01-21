@@ -238,31 +238,114 @@ window.toggleSidebar = () => {
   sidebar?.classList.toggle('minimized');
 };
 
-window.toggleNotifications = () => {
-  const dropdown = document.getElementById('notificationsDropdown');
-  if (dropdown) {
-    dropdown.classList.toggle('hidden');
-    // Hide dot when opened
-    if (!dropdown.classList.contains('hidden')) {
-      document.getElementById('notifDot')?.classList.add('hidden');
-    }
+window.handleGlobalSearch = async (query) => {
+  const resultsContainer = document.getElementById('globalSearchResults');
+  if (!query || query.length < 2) {
+    window.clearSearchResults();
+    return;
   }
+
+  const q = query.toLowerCase();
+  const results = {
+    navigation: [],
+    users: [],
+    logs: []
+  };
+
+  // 1. Search Navigation
+  const navItems = [
+    { name: 'Dashboard Insights', path: 'dashboard', keywords: ['dash', 'home', 'insight', 'stat'] },
+    { name: 'Channels & Messages', path: 'chat', keywords: ['chat', 'message', 'channel', 'communication'] },
+    { name: 'Identity & Profile', path: 'profile', keywords: ['profile', 'identity', 'me', 'account'] },
+    { name: 'System Preferences', path: 'settings', keywords: ['setting', 'preference', 'theme', 'config'] },
+    { name: 'Protocol Logs', path: 'logs', keywords: ['log', 'audit', 'protocol', 'history'] }
+  ];
+
+  results.navigation = navItems.filter(item =>
+    item.name.toLowerCase().includes(q) || item.keywords.some(k => k.includes(q))
+  );
+
+  // 2. Search Users (from cache)
+  if (typeof usersCache !== 'undefined') {
+    results.users = usersCache.filter(user =>
+      (user.displayName || '').toLowerCase().includes(q) ||
+      (user.email || '').toLowerCase().includes(q)
+    ).slice(0, 5);
+  }
+
+  // 3. Search Logs (fetch latest)
+  try {
+    const logs = await UserService.getActivityLog(AppState.currentUser.uid, 20);
+    results.logs = logs.filter(log =>
+      log.type.toLowerCase().includes(q) ||
+      JSON.stringify(log.details).toLowerCase().includes(q)
+    ).slice(0, 5);
+  } catch (e) {
+    console.warn('Search: Log retrieval failed', e);
+  }
+
+  window.renderSearchResults(results);
 };
 
-window.handleGlobalSearch = (query) => {
-  if (!query) return;
-  const q = query.toLowerCase();
+window.renderSearchResults = (results) => {
+  const container = document.getElementById('globalSearchResults');
+  if (!container) return;
 
-  if (q.includes('profile') || q.includes('identity') || q.includes('me')) {
-    window.navigateTo('profile');
-  } else if (q.includes('chat') || q.includes('message') || q.includes('channel')) {
-    window.navigateTo('chat');
-  } else if (q.includes('setting') || q.includes('preference') || q.includes('theme')) {
-    window.navigateTo('settings');
-  } else if (q.includes('dash') || q.includes('home')) {
-    window.navigateTo('dashboard');
-  } else {
-    UIHelper.showAlert(`Search for "${query}" initiated. Accessing global logs...`, 'success');
+  const hasResults = results.navigation.length > 0 || results.users.length > 0 || results.logs.length > 0;
+
+  if (!hasResults) {
+    container.innerHTML = '<div class="p-4 text-center text-slate-500 text-sm">No synchronized nodes found</div>';
+    container.classList.remove('hidden');
+    return;
+  }
+
+  let html = '';
+
+  if (results.navigation.length > 0) {
+    html += `<div class="p-2 border-b border-slate-100 dark:border-dark-border"><p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 px-2">Navigation</p>`;
+    results.navigation.forEach(item => {
+      html += `
+        <div onclick="window.navigateTo('${item.path}')" class="flex items-center gap-3 px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg cursor-pointer transition-colors group">
+          <i class="fas fa-link text-slate-400 group-hover:text-indigo-500"></i>
+          <span class="text-sm font-medium text-slate-700 dark:text-slate-300">${item.name}</span>
+        </div>`;
+    });
+    html += `</div>`;
+  }
+
+  if (results.users.length > 0) {
+    html += `<div class="p-2 border-b border-slate-100 dark:border-dark-border"><p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 px-2">Identities</p>`;
+    results.users.forEach(user => {
+      html += `
+        <div onclick="window.openChat('${user.uid}')" class="flex items-center gap-3 px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg cursor-pointer transition-colors group">
+          <img src="${user.profilePicture || 'https://www.w3schools.com/howto/img_avatar.png'}" class="w-6 h-6 rounded-full object-cover">
+          <span class="text-sm font-medium text-slate-700 dark:text-slate-300">${Validators.escapeHTML(user.displayName)}</span>
+        </div>`;
+    });
+    html += `</div>`;
+  }
+
+  if (results.logs.length > 0) {
+    html += `<div class="p-2"><p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 px-2">Audit Logs</p>`;
+    results.logs.forEach(log => {
+      html += `
+        <div class="flex items-center gap-3 px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg cursor-default transition-colors group">
+          <i class="fas fa-history text-slate-400"></i>
+          <span class="text-sm text-slate-500 dark:text-slate-400 truncate">${log.type.replace(/_/g, ' ')} node event</span>
+        </div>`;
+    });
+    html += `</div>`;
+  }
+
+  container.innerHTML = html;
+  container.classList.remove('hidden');
+};
+
+window.clearSearchResults = () => {
+  const container = document.getElementById('globalSearchResults');
+  if (container) {
+    container.classList.add('hidden');
+    container.innerHTML = '';
   }
 };
 
@@ -271,6 +354,7 @@ window.navigateTo = (page) => {
   document.getElementById('profilePage')?.classList.add('hidden');
   document.getElementById('chatPage')?.classList.add('hidden');
   document.getElementById('settingsPage')?.classList.add('hidden');
+  document.getElementById('logsPage')?.classList.add('hidden');
 
   document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.classList.remove('active');
@@ -297,9 +381,68 @@ window.navigateTo = (page) => {
     document.querySelectorAll('.nav-btn')[3]?.classList.add('active');
     if (breadcrumb) breadcrumb.textContent = 'Preferences';
     loadSettingsData();
+  } else if (page === 'logs') {
+    document.getElementById('logsPage')?.classList.remove('hidden');
+    if (breadcrumb) breadcrumb.textContent = 'Protocol Logs';
+    window.loadAllLogs();
   }
 
   console.log('Navigated to page', { page });
+};
+
+window.loadAllLogs = async () => {
+  const table = document.getElementById('fullLogsTable');
+  if (!table) return;
+
+  try {
+    const logs = await UserService.getActivityLog(AppState.currentUser.uid, 50);
+
+    if (logs.length === 0) {
+      table.innerHTML = '<tr><td colspan="3" class="px-6 py-8 text-center text-slate-400">No events found in synchronization timeline.</td></tr>';
+      return;
+    }
+
+    table.innerHTML = logs.map(log => {
+      const timestamp = log.timestamp?.toDate?.() || new Date(log.timestamp);
+      const timeStr = timestamp.toLocaleString('en-US', {
+        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+
+      return `
+        <tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+          <td class="px-6 py-4">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full ${this.getLogColor(log.type)}"></span>
+              <span class="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-tighter">${log.type.replace(/_/g, ' ')}</span>
+            </div>
+          </td>
+          <td class="px-6 py-4">
+            <p class="text-sm text-slate-600 dark:text-slate-400 font-medium">${Validators.escapeHTML(this.formatLogDetails(log))}</p>
+          </td>
+          <td class="px-6 py-4">
+            <span class="text-[10px] font-mono text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">${timeStr}</span>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (error) {
+    console.error('Failed to load logs', error);
+    table.innerHTML = '<tr><td colspan="3" class="px-6 py-8 text-center text-rose-500">Failed to synchronize protocol stream.</td></tr>';
+  }
+};
+
+window.getLogColor = (type) => {
+  if (type.includes('error') || type.includes('failure')) return 'bg-rose-500';
+  if (type.includes('login') || type.includes('auth')) return 'bg-indigo-500';
+  if (type.includes('profile') || type.includes('update')) return 'bg-emerald-500';
+  return 'bg-slate-400';
+};
+
+window.formatLogDetails = (log) => {
+  if (log.type === 'user_login') return 'Authenticated session initialized via security gateway.';
+  if (log.type === 'profile_updated') return `Interface parameters synchronized: ${Object.keys(log.details || {}).join(', ')}`;
+  if (log.type === 'profile_picture_uploaded') return 'Visual identity resource updated in cloud storage.';
+  return 'System event recorded in node history.';
 };
 
 // ===============================
@@ -357,7 +500,9 @@ window.deleteAccount = () => AuthService.deleteAccount();
 let currentChatUser = null;
 let unsubscribeChat = null;
 let unsubscribeUsers = null;
+let unsubscribeTyping = null;
 let usersCache = [];
+let typingTimeout = null;
 
 window.loadUsers = () => {
   if (!AppState.currentUser) return;
@@ -402,6 +547,7 @@ window.displayUsers = (users) => {
 };
 
 window.openChat = async (userId) => {
+  window.navigateTo('chat');
   const user = usersCache.find(u => u.uid === userId);
   if (!user) {
     // Fallback if not in cache (e.g. initial load)
@@ -421,8 +567,9 @@ window.openChat = async (userId) => {
   // Update header immediately
   window.updateChatHeader(currentChatUser);
 
-  // Unsubscribe from previous listener
+  // Unsubscribe from previous listeners
   if (unsubscribeChat) unsubscribeChat();
+  if (unsubscribeTyping) unsubscribeTyping();
 
   // Load messages in parallel 
   const messages = await ChatService.getMessages(AppState.currentUser.uid, userId, 50);
@@ -430,28 +577,52 @@ window.openChat = async (userId) => {
 
   ChatService.markMessagesAsRead(AppState.currentUser.uid, userId, AppState.currentUser.uid);
 
+  // Message listener
   unsubscribeChat = ChatService.onMessagesChange(AppState.currentUser.uid, userId, (updatedMessages) => {
     if (updatedMessages.length !== messages.length) {
       window.displayMessages(updatedMessages);
     }
   });
+
+  // Typing listener
+  unsubscribeTyping = ChatService.onTypingStatusChange(AppState.currentUser.uid, userId, userId, (isTyping) => {
+    window.updateChatHeader(currentChatUser, isTyping);
+  });
 };
 
-window.updateChatHeader = (user) => {
+window.handleTyping = () => {
+  if (!currentChatUser) return;
+
+  // Broadcast typing status
+  ChatService.setTypingStatus(AppState.currentUser.uid, currentChatUser.uid, true);
+
+  // Clear previous timeout
+  if (typingTimeout) clearTimeout(typingTimeout);
+
+  // Set timeout to stop typing status after 3 seconds of inactivity
+  typingTimeout = setTimeout(() => {
+    ChatService.setTypingStatus(AppState.currentUser.uid, currentChatUser.uid, false);
+  }, 3000);
+};
+
+window.updateChatHeader = (user, isTyping = false) => {
   const chatHeader = document.getElementById('chatHeader');
   if (chatHeader) {
     chatHeader.innerHTML = `
-      <div class="flex items-center gap-3 animate-fade-in">
+      <div class="flex items-center gap-3 animate-fade-in text-slate-900 dark:text-white">
         <div class="relative">
           <img src="${user.profilePicture || 'https://www.w3schools.com/howto/img_avatar.png'}" 
                class="w-10 h-10 rounded-xl object-cover border-2 border-indigo-100 dark:border-indigo-900 transition-all duration-500">
           <div class="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-500 border-2 border-white dark:border-dark-card rounded-full"></div>
         </div>
         <div>
-          <h3 class="font-bold text-slate-900 dark:text-white text-sm">${Validators.escapeHTML(user.displayName)}</h3>
+          <h3 class="font-bold text-sm">${Validators.escapeHTML(user.displayName)}</h3>
           <div class="flex items-center gap-1.5">
-            <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
-            <p class="text-[10px] text-slate-500 font-bold uppercase tracking-tight">Active Connection</p>
+            ${isTyping ?
+        `<span class="text-[10px] text-indigo-500 font-bold animate-pulse uppercase tracking-tight italic">Transmitting data...</span>` :
+        `<span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+               <p class="text-[10px] text-slate-500 font-bold uppercase tracking-tight">Active Connection</p>`
+      }
           </div>
         </div>
       </div>
