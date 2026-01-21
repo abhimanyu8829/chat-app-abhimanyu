@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat & Auth App - Firebase</title>
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
+          },
+          colors: {
+            enterprise: {
+              active: '#6366f1',
+              primary: '#4f46e5',
+              secondary: '#64748b',
+              accent: '#f43f5e',
+              success: '#10b981',
+              warning: '#f59e0b',
+            },
+            dark: {
+              bg: '#0f172a',
+              card: '#1e293b',
+              border: '#334155'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    /* Animations */
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(-100%);
+      }
+
+      to {
+        transform: translateX(0);
+      }
+    }
+
+    .animate-fade-in {
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid rgba(255, 255, 255, 0.3);
+      border-top: 4px solid white;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    #loadingScreen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+      opacity: 1;
+      transition: opacity 0.5s ease-out;
+    }
+
+    #loadingScreen.hide-loading {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #chatMessages {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(168, 85, 247, 0.3) transparent;
+    }
+
+    /* Alert Box */
+    .alert {
+      @apply fixed top-4 right-4 px-6 py-3 rounded-xl shadow-2xl text-white font-bold tracking-tight transition-all duration-300 z-[6000] flex items-center gap-3 backdrop-blur-md;
+      transform: translateY(-20px);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .alert.active {
+      transform: translateY(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .alert.success {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.9) 0%, rgba(5, 150, 105, 0.9) 100%);
+      @apply shadow-emerald-500/20;
+    }
+
+    .alert.error {
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.9) 0%, rgba(220, 38, 38, 0.9) 100%);
+      @apply shadow-rose-500/20;
+    }
+
+    #chatMessages::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    #chatMessages::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    #chatMessages::-webkit-scrollbar-thumb {
+      background: rgba(168, 85, 247, 0.3);
+      border-radius: 3px;
+    }
+
+    #chatMessages::-webkit-scrollbar-thumb:hover {
+      background: rgba(168, 85, 247, 0.5);
+    }
+
+    /* Global Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 10px;
+    }
+
+    .dark ::-webkit-scrollbar-thumb {
+      background: #475569;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+
+    /* Enterprise Buttons */
+    .btn-indigo {
+      @apply bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition duration-200 flex items-center justify-center gap-2 shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+    }
+
+    /* Sidebar Transitions */
+    #sidebarContainer {
+      transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    #sidebarContainer.minimized {
+      width: 80px;
+    }
+
+    #sidebarContainer.minimized .nav-text,
+    #sidebarContainer.minimized .user-details {
+      display: none;
+    }
+
+    #sidebarContainer.minimized .nav-btn {
+      justify-content: center;
+      padding: 0.75rem;
+    }
+
+    #sidebarContainer.minimized .nav-icon {
+      margin-right: 0;
+      font-size: 1.25rem;
+    }
+
+    /* Page container */
+    .page-content {
+      @apply max-w-7xl mx-auto w-full p-6 lg:p-8;
+    }
+
+    /* Stat Card */
+    .stat-card {
+      @apply bg-white dark:bg-dark-card p-6 rounded-xl border border-slate-200 dark:border-dark-border shadow-sm hover:shadow-md transition-shadow duration-200;
+    }
+
+    /* Blob Animations */
+    @keyframes blob {
+      0% {
+        transform: translate(0px, 0px) scale(1);
+      }
+
+      33% {
+        transform: translate(30px, -50px) scale(1.1);
+      }
+
+      66% {
+        transform: translate(-20px, 20px) scale(0.9);
+      }
+
+      100% {
+        transform: translate(0px, 0px) scale(1);
+      }
+    }
+
+    .animate-blob {
+      animation: blob 7s infinite;
+    }
+
+    .animation-delay-2000 {
+      animation-delay: 2s;
+    }
+
+    .animation-delay-4000 {
+      animation-delay: 4s;
+    }
+
+    #req-length.valid,
+    #req-uppercase.valid,
+    #req-number.valid,
+    #req-special.valid {
+      @apply text-emerald-500;
+    }
+  </style>
+</head>
+
+<body class="bg-gray-50 dark:bg-dark-bg transition-colors duration-300">
+
+  <!-- Loading Screen -->
+  <div id="loadingScreen">
+    <div class="text-center">
+      <div class="spinner mb-4"></div>
+      <p class="text-white text-lg font-medium">Loading...</p>
+    </div>
+  </div>
+
+  <!-- Alert Box -->
+  <div id="alertBox" class="fixed top-4 right-4 rounded-lg px-6 py-3 shadow-lg text-white opacity-0 transition-all"
+    style="z-index: 5000;"></div>
+
+  <!-- AUTH CONTAINER -->
+  <div id="authContainer"
+    class="min-h-screen bg-slate-900 flex items-center justify-center p-6 relative overflow-hidden">
+    <!-- Background logic/visuals -->
+    <div class="absolute inset-0 opacity-20">
+      <div
+        class="absolute top-0 -left-4 w-72 h-72 bg-indigo-500 rounded-full mix-blend-multiply filter blur-3xl animate-blob">
+      </div>
+      <div
+        class="absolute top-0 -right-4 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-2000">
+      </div>
+      <div
+        class="absolute -bottom-8 left-20 w-72 h-72 bg-pink-500 rounded-full mix-blend-multiply filter blur-3xl animate-blob animation-delay-4000">
+      </div>
+    </div>
+
+    <div class="w-full max-w-lg relative z-10">
+      <!-- Header -->
+      <div class="text-center mb-10">
+        <div
+          class="inline-flex items-center justify-center w-16 h-16 bg-indigo-600 rounded-2xl shadow-xl shadow-indigo-500/20 mb-6">
+          <i class="fas fa-bolt text-3xl text-white"></i>
+        </div>
+        <h1 class="text-3xl font-extrabold text-white tracking-tight">Nexus Enterprise Terminal</h1>
+        <p class="text-slate-400 mt-2">Professional Grade Communication Infrastructure</p>
+      </div>
+
+      <!-- Auth Forms Container -->
+      <div class="bg-white/5 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden border border-white/10">
+        <!-- Signup Section -->
+        <div id="signupSection" class="p-10">
+          <h2 class="text-xl font-bold text-white mb-8 border-l-4 border-indigo-500 pl-4">Create Node</h2>
+
+          <div class="space-y-6">
+            <div>
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Network Identifier
+                (Email)</label>
+              <input id="regEmail" type="email" placeholder="identity@nexus.corp"
+                class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white outline-none focus:ring-2 focus:ring-indigo-500 transition">
+              <span class="error-message text-rose-500 text-xs mt-1 hidden font-medium"></span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Access Key
+                  (Password)</label>
+                <input id="regPassword" type="password" placeholder="••••••••"
+                  class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white outline-none focus:ring-2 focus:ring-indigo-500 transition">
+                <span class="error-message text-rose-500 text-xs mt-1 hidden font-medium"></span>
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Verify Key</label>
+                <input id="regConfirmPassword" type="password" placeholder="••••••••"
+                  class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white outline-none focus:ring-2 focus:ring-indigo-500 transition">
+                <span class="error-message text-rose-500 text-xs mt-1 hidden font-medium"></span>
+              </div>
+            </div>
+
+            <!-- Password Requirements -->
+            <div class="p-4 bg-white/5 rounded-xl space-y-2">
+              <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Security Compliance</p>
+              <div class="grid grid-cols-2 gap-2 text-[11px]">
+                <div class="flex items-center gap-2"><span id="req-length" class="text-slate-600">●</span> <span
+                    class="text-slate-400">8+ CHARACTERS</span></div>
+                <div class="flex items-center gap-2"><span id="req-uppercase" class="text-slate-600">●</span> <span
+                    class="text-slate-400">UPPERCASE</span></div>
+                <div class="flex items-center gap-2"><span id="req-number" class="text-slate-600">●</span> <span
+                    class="text-slate-400">NUMERIC</span></div>
+                <div class="flex items-center gap-2"><span id="req-special" class="text-slate-600">●</span> <span
+                    class="text-slate-400">SYMBOLIC</span></div>
+              </div>
+            </div>
+
+            <button onclick="window.register()"
+              class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-indigo-500/20 transition transform active:scale-95">
+              Initialize Node Access
+            </button>
+          </div>
+
+          <div class="mt-8 text-center">
+            <p class="text-slate-400 text-sm">Existing identity detected? <button
+                onclick="window.toggleSection('login')" class="text-indigo-400 font-bold hover:underline">Establish
+                Link</button></p>
+          </div>
+        </div>
+
+        <!-- Login Section -->
+        <div id="loginSection" class="p-10 hidden">
+          <h2 class="text-xl font-bold text-white mb-8 border-l-4 border-indigo-500 pl-4">Establish Handshake</h2>
+
+          <div class="space-y-6">
+            <div>
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Identifier</label>
+              <input id="loginEmail" type="email" placeholder="identity@nexus.corp"
+                class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white outline-none focus:ring-2 focus:ring-indigo-500 transition">
+              <span class="error-message text-rose-500 text-xs mt-1 hidden font-medium"></span>
+            </div>
+
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <label class="block text-xs font-bold text-slate-400 uppercase tracking-widest">Access Token</label>
+                <button onclick="window.toggleSection('reset')"
+                  class="text-[10px] font-bold text-indigo-400 uppercase hover:underline">Recovery Mode</button>
+              </div>
+              <input id="loginPassword" type="password" placeholder="••••••••"
+                class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white outline-none focus:ring-2 focus:ring-indigo-500 transition">
+              <span class="error-message text-rose-500 text-xs mt-1 hidden font-medium"></span>
+            </div>
+
+            <button onclick="window.login()"
+              class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-indigo-500/20 transition transform active:scale-95">
+              Authenticate & Connect
+            </button>
+          </div>
+
+          <div class="mt-8">
+            <div class="relative flex items-center justify-center mb-8">
+              <div class="absolute inset-0 flex items-center">
+                <div class="w-full border-t border-white/10"></div>
+              </div>
+              <span
+                class="relative px-4 text-[10px] font-bold text-slate-500 bg-transparent uppercase tracking-widest">Third
+                Party Auth</span>
+            </div>
+
+            <button onclick="window.signInWithGoogle()"
+              class="w-full bg-white/5 border border-white/10 text-white font-bold py-3 rounded-xl hover:bg-white/10 transition flex items-center justify-center gap-3">
+              <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-5 h-5">
+              Nexus-G Integrated Login
+            </button>
+
+            <p class="mt-8 text-center text-slate-400 text-sm">Unrecognized? <button
+                onclick="window.toggleSection('signup')" class="text-indigo-400 font-bold hover:underline">Register
+                Node</button></p>
+          </div>
+        </div>
+
+        <!-- Reset Password Section -->
+        <div id="resetSection" class="p-10 hidden">
+          <h2 class="text-xl font-bold text-white mb-8 border-l-4 border-indigo-500 pl-4">Access Restoration</h2>
+
+          <div class="space-y-6">
+            <div>
+              <label class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Registered
+                Email</label>
+              <input id="resetEmail" type="email" placeholder="identity@nexus.corp"
+                class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white outline-none focus:ring-2 focus:ring-indigo-500 transition">
+              <span class="error-message text-rose-500 text-xs mt-1 hidden font-medium"></span>
+            </div>
+
+            <button onclick="window.resetPassword()"
+              class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-indigo-500/20 transition transform active:scale-95">
+              Transmit Reset Vector
+            </button>
+          </div>
+
+          <div class="mt-8 text-center">
+            <button onclick="window.toggleSection('login')"
+              class="text-indigo-400 font-bold text-sm hover:underline">Return to Hub</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD CONTAINER -->
+  <div id="dashboardContainer" class="hidden h-screen bg-slate-50 dark:bg-dark-bg flex overflow-hidden font-sans">
+    <!-- Sidebar -->
+    <aside id="sidebarContainer"
+      class="w-64 bg-slate-900 text-slate-300 flex flex-col transition-all duration-300 z-30 shrink-0">
+      <!-- Logo / Brand -->
+      <div class="h-16 flex items-center px-6 border-b border-slate-800">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center shrink-0">
+            <i class="fas fa-bolt text-white"></i>
+          </div>
+          <span class="nav-text font-bold text-white text-xl tracking-tight">Nexus CRM</span>
+        </div>
+      </div>
+
+      <!-- Navigation Menu -->
+      <nav class="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
+        <label class="nav-text text-xs font-semibold text-slate-500 uppercase tracking-wider px-2 mb-2 block">Main
+          Menu</label>
+
+        <button onclick="window.navigateTo('dashboard')"
+          class="nav-btn active group w-full flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-colors hover:bg-slate-800 hover:text-white">
+          <i class="fas fa-chart-pie nav-icon w-5 text-lg mr-3 transition-colors group-hover:text-indigo-400"></i>
+          <span class="nav-text">Insights</span>
+        </button>
+
+        <button onclick="window.navigateTo('chat')"
+          class="nav-btn group w-full flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-colors hover:bg-slate-800 hover:text-white text-slate-400">
+          <i class="fas fa-messages nav-icon w-5 text-lg mr-3 transition-colors group-hover:text-indigo-400"></i>
+          <span class="nav-text">Channels</span>
+        </button>
+
+        <label
+          class="nav-text text-xs font-semibold text-slate-500 uppercase tracking-wider px-2 mb-2 mt-6 block">Account</label>
+
+        <button onclick="window.navigateTo('profile')"
+          class="nav-btn group w-full flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-colors hover:bg-slate-800 hover:text-white text-slate-400">
+          <i class="fas fa-user nav-icon w-5 text-lg mr-3 transition-colors group-hover:text-indigo-400"></i>
+          <span class="nav-text">Identity</span>
+        </button>
+
+        <button onclick="window.navigateTo('settings')"
+          class="nav-btn group w-full flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-colors hover:bg-slate-800 hover:text-white text-slate-400">
+          <i class="fas fa-sliders-h nav-icon w-5 text-lg mr-3 transition-colors group-hover:text-indigo-400"></i>
+          <span class="nav-text">Preferences</span>
+        </button>
+      </nav>
+
+      <!-- Sidebar Footer -->
+      <div class="p-4 border-t border-slate-800">
+        <div class="user-details flex items-center p-2 rounded-lg bg-slate-800/50 mb-4">
+          <img id="dashboardUserPicture" src="https://www.w3schools.com/howto/img_avatar.png"
+            class="w-10 h-10 rounded-full object-cover border-2 border-slate-700">
+          <div class="ml-3 overflow-hidden">
+            <p id="dashboardUserName" class="text-sm font-semibold text-white truncate">User Name</p>
+            <p id="dashboardUserEmail" class="text-xs text-slate-500 truncate">email@example.com</p>
+          </div>
+        </div>
+        <button onclick="window.logout()"
+          class="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-medium py-2 rounded-lg transition">
+          <i class="fas fa-sign-out-alt"></i>
+          <span class="nav-text">Terminate Session</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content Wrapper -->
+    <div class="flex-1 flex flex-col min-w-0 bg-slate-50 dark:bg-dark-bg">
+      <!-- Universal Header -->
+      <header
+        class="h-16 flex items-center justify-between px-8 bg-white dark:bg-dark-card border-b border-slate-200 dark:border-dark-border shadow-sm z-20">
+        <div class="flex items-center gap-4">
+          <button onclick="window.toggleSidebar()" class="text-slate-500 hover:text-indigo-600 transition">
+            <i class="fas fa-bars-staggered text-xl"></i>
+          </button>
+          <div class="h-6 w-px bg-slate-200 dark:bg-slate-800 mx-2"></div>
+          <div class="flex items-center text-sm text-slate-500 font-medium">
+            <span class="hover:text-indigo-600 cursor-pointer">Platform</span>
+            <i class="fas fa-chevron-right mx-2 text-[10px] text-slate-400"></i>
+            <span id="breadcrumbCurrent" class="text-slate-900 dark:text-white">Dashboard</span>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-6">
+          <!-- Quick Search -->
+          <div
+            class="hidden md:flex items-center px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg border border-transparent focus-within:border-indigo-400 transition-all w-64">
+            <i class="fas fa-search text-slate-400 mr-2 text-sm"></i>
+            <input id="globalSearchInput" type="text" placeholder="Global search..."
+              class="bg-transparent border-none text-sm outline-none w-full text-slate-600 dark:text-slate-300"
+              onkeypress="if(event.key === 'Enter') window.handleGlobalSearch(this.value)">
+            <span
+              class="text-[10px] font-bold text-slate-400 bg-white dark:bg-slate-700 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-600 ml-2">⌘K</span>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <div class="flex items-center gap-3 relative">
+              <button onclick="window.toggleNotifications()"
+                class="w-10 h-10 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-indigo-600 transition relative">
+                <i class="fas fa-bell"></i>
+                <span id="notifDot"
+                  class="absolute top-2.5 right-2.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-white dark:border-dark-card"></span>
+              </button>
+
+              <!-- Notifications Dropdown -->
+              <div id="notificationsDropdown"
+                class="hidden absolute top-full right-0 mt-2 w-80 bg-white dark:bg-dark-card rounded-2xl shadow-2xl border border-slate-100 dark:border-dark-border z-50 overflow-hidden animate-fade-in">
+                <div
+                  class="px-5 py-4 border-b border-slate-50 dark:border-dark-border flex items-center justify-between">
+                  <h3 class="font-bold text-slate-900 dark:text-white text-sm">Notifications</h3>
+                  <span
+                    class="text-[10px] font-bold bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full uppercase">3
+                    New</span>
+                </div>
+                <div class="max-h-96 overflow-y-auto divide-y divide-slate-50 dark:divide-slate-800/50">
+                  <div class="p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition cursor-pointer">
+                    <div class="flex gap-3">
+                      <div
+                        class="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+                        <i class="fas fa-bolt text-xs"></i>
+                      </div>
+                      <div>
+                        <p class="text-xs text-slate-900 dark:text-white font-bold">System Optimization Complete</p>
+                        <p class="text-[10px] text-slate-500 mt-0.5">Your dashboard metrics have been refreshed.</p>
+                        <p class="text-[9px] text-slate-400 mt-1 uppercase font-bold">2m ago</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition cursor-pointer">
+                    <div class="flex gap-3">
+                      <div
+                        class="w-8 h-8 rounded-full bg-rose-100 dark:bg-rose-900/40 flex items-center justify-center text-rose-600 dark:text-rose-400 shrink-0">
+                        <i class="fas fa-shield-halved text-xs"></i>
+                      </div>
+                      <div>
+                        <p class="text-xs text-slate-900 dark:text-white font-bold">Security Audit Warning</p>
+                        <p class="text-[10px] text-slate-500 mt-0.5">New login detected from unrecognized device.</p>
+                        <p class="text-[9px] text-slate-400 mt-1 uppercase font-bold">45m ago</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div
+                  class="p-3 bg-slate-50 dark:bg-slate-800/50 text-center border-t border-slate-100 dark:border-dark-border">
+                  <button
+                    class="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline uppercase tracking-tight">View
+                    All Protocol Logs</button>
+                </div>
+              </div>
+              <div class="h-8 w-px bg-slate-200 dark:bg-slate-800 mx-1"></div>
+              <button onclick="window.navigateTo('profile')"
+                class="flex items-center gap-2 pl-2 hover:opacity-80 transition">
+                <img id="headerUserPicture" src="https://www.w3schools.com/howto/img_avatar.png"
+                  class="w-8 h-8 rounded-full border-2 border-indigo-100 object-cover">
+              </button>
+            </div>
+          </div>
+      </header>
+
+      <!-- View Containers -->
+      <main class="flex-1 overflow-y-auto overflow-x-hidden">
+        <!-- Dashboard Page -->
+        <div id="dashboardPage" class="page-content animate-fade-in">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+            <div>
+              <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Business Intelligence Overview</h1>
+              <p class="text-slate-500 text-sm mt-1">Real-time metrics and system health monitoring</p>
+            </div>
+            <div class="flex items-center gap-3">
+              <button
+                class="bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-100 transition">
+                <i class="fas fa-download mr-2"></i>Export Report
+              </button>
+              <button onclick="window.navigateTo('chat')"
+                class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-sm transition transform active:scale-95">
+                <i class="fas fa-plus mr-2"></i>New Message
+              </button>
+            </div>
+          </div>
+
+          <!-- Stats Grid -->
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="stat-card">
+              <div class="flex items-center justify-between mb-4">
+                <div
+                  class="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/40 rounded-lg flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                  <i class="fas fa-fingerprint text-lg"></i>
+                </div>
+                <span
+                  class="text-xs font-bold text-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded-full">+12.5%</span>
+              </div>
+              <p class="text-slate-500 text-xs font-semibold uppercase tracking-wider">Access frequency</p>
+              <h3 id="loginCount" class="text-2xl font-bold text-slate-900 dark:text-white mt-1">0</h3>
+            </div>
+
+            <div class="stat-card">
+              <div class="flex items-center justify-between mb-4">
+                <div
+                  class="w-10 h-10 bg-blue-100 dark:bg-blue-900/40 rounded-lg flex items-center justify-center text-blue-600 dark:text-blue-400">
+                  <i class="fas fa-calendar-check text-lg"></i>
+                </div>
+                <span
+                  class="text-xs font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full">Stable</span>
+              </div>
+              <p class="text-slate-500 text-xs font-semibold uppercase tracking-wider">Provisioned On</p>
+              <h3 id="joinDate" class="text-xl font-bold text-slate-900 dark:text-white mt-1">N/A</h3>
+            </div>
+
+            <div class="stat-card">
+              <div class="flex items-center justify-between mb-4">
+                <div
+                  class="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/40 rounded-lg flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                  <i class="fas fa-signal text-lg"></i>
+                </div>
+                <span class="relative flex h-3 w-3">
+                  <span
+                    class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                </span>
+              </div>
+              <p class="text-slate-500 text-xs font-semibold uppercase tracking-wider">Node Status</p>
+              <h3 class="text-2xl font-bold text-slate-900 dark:text-white mt-1">Operational</h3>
+            </div>
+
+            <div class="stat-card">
+              <div class="flex items-center justify-between mb-4">
+                <div
+                  class="w-10 h-10 bg-rose-100 dark:bg-rose-900/40 rounded-lg flex items-center justify-center text-rose-600 dark:text-rose-400">
+                  <i class="fas fa-shield-halved text-lg"></i>
+                </div>
+                <span
+                  class="text-xs font-bold text-rose-500 bg-rose-50 dark:bg-rose-900/20 px-2 py-1 rounded-full">Secure</span>
+              </div>
+              <p class="text-slate-500 text-xs font-semibold uppercase tracking-wider">Security Layer</p>
+              <h3 class="text-2xl font-bold text-slate-900 dark:text-white mt-1">Verified</h3>
+            </div>
+          </div>
+
+          <!-- Second Row: Activity and Details -->
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Activity Timeline -->
+            <div
+              class="lg:col-span-2 bg-white dark:bg-dark-card rounded-xl border border-slate-200 dark:border-dark-border shadow-sm overflow-hidden">
+              <div
+                class="px-6 py-4 border-b border-slate-100 dark:border-dark-border flex items-center justify-between">
+                <h3 class="font-bold text-slate-900 dark:text-white">Audit Log</h3>
+                <button class="text-indigo-600 text-xs font-bold hover:underline">View All</button>
+              </div>
+              <div id="activityFeed" class="p-6 space-y-6">
+                <!-- Activity Loading State -->
+                <div class="flex items-center justify-center py-10">
+                  <div class="text-center">
+                    <i class="fas fa-circle-notch fa-spin text-indigo-400 text-3xl mb-3"></i>
+                    <p class="text-slate-400 text-sm">Synchronizing audit logs...</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Quick Profile Summary -->
+            <div
+              class="bg-indigo-600 rounded-xl p-8 text-white relative overflow-hidden shadow-lg shadow-indigo-200 dark:shadow-none">
+              <div class="relative z-10">
+                <h3 class="text-lg font-bold mb-4 opacity-90">Connected Identity</h3>
+                <div class="flex items-center gap-4 mb-8">
+                  <img id="summaryUserPicture" src="https://www.w3schools.com/howto/img_avatar.png"
+                    class="w-16 h-16 rounded-2xl border-2 border-indigo-400 object-cover shadow-xl">
+                  <div>
+                    <p id="summaryUserName" class="text-xl font-bold tracking-tight">User Name</p>
+                    <p class="text-indigo-200 text-sm">Enterprise Tier Member</p>
+                  </div>
+                </div>
+                <div class="space-y-4">
+                  <div class="flex justify-between items-center text-sm border-b border-indigo-500/50 pb-2">
+                    <span class="text-indigo-200">Integrations</span>
+                    <span class="font-bold">Active (4)</span>
+                  </div>
+                  <div class="flex justify-between items-center text-sm border-b border-indigo-500/50 pb-2">
+                    <span class="text-indigo-200">Storage Usage</span>
+                    <span class="font-bold">2.4 GB / 10 GB</span>
+                  </div>
+                  <div class="flex justify-between items-center text-sm">
+                    <span class="text-indigo-200">Uptime</span>
+                    <span class="font-bold">99.98%</span>
+                  </div>
+                </div>
+                <button onclick="window.navigateTo('profile')"
+                  class="w-full mt-8 bg-white/10 hover:bg-white/20 text-white font-bold py-3 rounded-lg border border-white/20 transition backdrop-blur-sm">
+                  Manage Identity
+                </button>
+              </div>
+              <!-- Decorative elements -->
+              <div class="absolute -bottom-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-3xl"></div>
+              <div class="absolute top-0 right-0 p-4 opacity-10">
+                <i class="fas fa-fingerprint text-9xl"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Profile Page -->
+        <div id="profilePage" class="page-content animate-fade-in hidden">
+          <div class="mb-10">
+            <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Identity Management</h1>
+            <p class="text-slate-500 text-sm mt-1">Configure your professional profile and digital presence</p>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Left: Profile Preview -->
+            <div class="lg:col-span-1">
+              <div
+                class="bg-white dark:bg-dark-card rounded-xl border border-slate-200 dark:border-dark-border shadow-sm p-6 text-center">
+                <div class="relative inline-block mb-6">
+                  <img id="profilePicturePreview" src="https://www.w3schools.com/howto/img_avatar.png"
+                    class="w-32 h-32 rounded-3xl object-cover border-4 border-slate-50 dark:border-slate-800 shadow-xl mx-auto">
+                  <div id="uploadProgressProfile"
+                    class="hidden absolute inset-0 flex items-center justify-center bg-black/60 rounded-3xl backdrop-blur-sm">
+                    <div class="text-white text-2xl"><i class="fas fa-spinner fa-spin"></i></div>
+                  </div>
+                  <button onclick="document.getElementById('profilePictureInput').click()"
+                    class="absolute -bottom-2 -right-2 w-10 h-10 bg-indigo-600 text-white rounded-xl flex items-center justify-center shadow-lg hover:bg-indigo-700 transition">
+                    <i class="fas fa-camera"></i>
+                  </button>
+                  <input id="profilePictureInput" type="file" accept="image/*" class="hidden">
+                </div>
+
+                <h3 id="previewName" class="text-xl font-bold text-slate-900 dark:text-white mt-2">Not set</h3>
+                <p id="previewEmail" class="text-sm text-slate-500 mb-6 truncate px-4">email@example.com</p>
+
+                <div class="pt-6 border-t border-slate-100 dark:border-slate-800">
+                  <div class="flex flex-col gap-2">
+                    <button id="removeProfilePictureBtn" onclick="window.removeProfilePicture()"
+                      class="text-rose-500 text-sm font-semibold hover:bg-rose-50 dark:hover:bg-rose-900/10 py-2 rounded-lg transition hidden">
+                      <i class="fas fa-trash-alt mr-2"></i>Delete Avatar
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Status Card -->
+              <div class="bg-slate-900 rounded-xl mt-6 p-6 text-slate-300">
+                <div class="flex items-center gap-3 mb-4">
+                  <div class="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                  <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Account Health</span>
+                </div>
+                <p class="text-sm text-white font-medium mb-1">Authenticated</p>
+                <p class="text-xs text-slate-500">Verified identity with full system access.</p>
+              </div>
+            </div>
+
+            <!-- Right: Edit Form -->
+            <div class="lg:col-span-2">
+              <div
+                class="bg-white dark:bg-dark-card rounded-xl border border-slate-200 dark:border-dark-border shadow-sm overflow-hidden">
+                <div class="px-8 py-6 border-b border-slate-100 dark:border-dark-border">
+                  <h3 class="font-bold text-slate-900 dark:text-white">Core Attributes</h3>
+                </div>
+                <div class="p-8 space-y-6">
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Given
+                        Name</label>
+                      <input id="profileFirstName" type="text" placeholder="John"
+                        class="w-full px-4 py-2.5 border border-slate-200 dark:border-dark-border rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition">
+                      <span class="error-message text-rose-500 text-xs mt-1 hidden font-medium"></span>
+                    </div>
+
+                    <div>
+                      <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Family
+                        Name</label>
+                      <input id="profileLastName" type="text" placeholder="Doe"
+                        class="w-full px-4 py-2.5 border border-slate-200 dark:border-dark-border rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition">
+                      <span class="error-message text-rose-500 text-xs mt-1 hidden font-medium"></span>
+                    </div>
+
+                    <div>
+                      <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Comms Channel
+                        (Phone)</label>
+                      <input id="profilePhone" type="tel" placeholder="+1 (555) 123-4567"
+                        class="w-full px-4 py-2.5 border border-slate-200 dark:border-dark-border rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition">
+                      <span class="error-message text-rose-500 text-xs mt-1 hidden font-medium"></span>
+                    </div>
+
+                    <div>
+                      <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">System ID
+                        (Email)</label>
+                      <input id="profileEmail" type="email" disabled
+                        class="w-full px-4 py-2.5 border border-slate-200 dark:border-dark-border rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed">
+                    </div>
+                  </div>
+
+                  <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Biography /
+                      Professional Summary</label>
+                    <textarea id="profileBio" placeholder="Introduce yourself..." rows="4"
+                      class="w-full px-4 py-2.5 border border-slate-200 dark:border-dark-border rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:bg-white outline-none transition"></textarea>
+                  </div>
+
+                  <div class="pt-6 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+                    <button onclick="window.updateUserProfile()"
+                      class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-8 rounded-lg shadow-lg shadow-indigo-200 dark:shadow-none transition transform active:scale-95">
+                      Synchronize Profile
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chat Page (Channels) -->
+        <div id="chatPage" class="page-content h-[calc(100vh-64px)] flex flex-col hidden animate-fade-in">
+          <div class="mb-6">
+            <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Professional Communications</h1>
+            <p class="text-slate-500 text-sm mt-1">End-to-end encrypted messaging node</p>
+          </div>
+
+          <div class="flex-1 flex gap-6 min-h-0 mb-8">
+            <!-- Sidebar: User Directory -->
+            <div
+              class="w-80 bg-white dark:bg-dark-card rounded-xl border border-slate-200 dark:border-dark-border shadow-sm flex flex-col overflow-hidden">
+              <div class="p-4 border-b border-slate-100 dark:border-dark-border bg-slate-50 dark:bg-slate-800/50">
+                <div class="relative">
+                  <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                  <input type="text" placeholder="Filter directory..."
+                    class="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition">
+                </div>
+              </div>
+              <div id="usersList" class="flex-1 overflow-y-auto divide-y divide-slate-50 dark:divide-slate-800/50">
+                <!-- User items will be rendered here -->
+                <div class="p-8 text-center">
+                  <i class="fas fa-circle-notch fa-spin text-indigo-500 text-xl mb-3"></i>
+                  <p class="text-xs text-slate-400 font-medium uppercase tracking-widest">Initalizing Directory</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Primary Chat Interface -->
+            <div
+              class="flex-1 bg-white dark:bg-dark-card rounded-xl border border-slate-200 dark:border-dark-border shadow-sm flex flex-col overflow-hidden">
+              <!-- Header -->
+              <div id="chatHeader"
+                class="h-16 px-6 border-b border-slate-100 dark:border-dark-border flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <div
+                    class="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-400">
+                    <i class="fas fa-terminal"></i>
+                  </div>
+                  <div>
+                    <h3 class="font-bold text-slate-900 dark:text-white text-sm">System Standby</h3>
+                    <p class="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Select identity to initiate
+                      handshake</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button
+                    class="w-8 h-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 transition">
+                    <i class="fas fa-phone-flip text-xs"></i>
+                  </button>
+                  <button
+                    class="w-8 h-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 transition">
+                    <i class="fas fa-video text-xs"></i>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Messages Terminal -->
+              <div id="chatMessages" class="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/30 dark:bg-slate-900/10">
+                <div class="h-full flex flex-col items-center justify-center text-center opacity-40">
+                  <div
+                    class="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-3xl flex items-center justify-center mb-4">
+                    <i class="fas fa-comments text-4xl text-slate-300"></i>
+                  </div>
+                  <h4 class="text-lg font-bold text-slate-900 dark:text-white">Secure Channel Inactive</h4>
+                  <p class="text-sm text-slate-500 max-w-xs mx-auto">Please select a verified organizational member from
+                    the directory to begin professional correspondence.</p>
+                </div>
+              </div>
+
+              <!-- Input Console -->
+              <div class="p-4 bg-white dark:bg-dark-card border-t border-slate-100 dark:border-dark-border">
+                <div
+                  class="flex items-center gap-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2 focus-within:ring-2 focus-within:ring-indigo-500 transition">
+                  <button class="w-10 h-10 shrink-0 text-slate-400 hover:text-indigo-600 transition">
+                    <i class="fas fa-paperclip"></i>
+                  </button>
+                  <input id="messageInput" type="text" placeholder="Shift + Enter for new line..."
+                    class="flex-1 bg-transparent border-none text-sm outline-none text-slate-900 dark:text-white"
+                    onkeypress="if(event.key === 'Enter') window.sendMessage()">
+                  <button onclick="window.sendMessage()"
+                    class="w-10 h-10 shrink-0 bg-indigo-600 text-white rounded-lg shadow-md hover:bg-indigo-700 transition flex items-center justify-center">
+                    <i class="fas fa-paper-plane text-sm"></i>
+                  </button>
+                </div>
+                <div class="mt-2 flex items-center justify-between px-2">
+                  <p class="text-[10px] text-slate-400 font-medium">Auto-save enabled • End-to-end encrypted</p>
+                  <div class="flex items-center gap-3">
+                    <i class="fab fa-markdown text-slate-300 text-xs" title="Markdown supported"></i>
+                    <i class="fas fa-bolt text-indigo-400 text-[10px]" title="Nexus Optimized"></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Settings Page (Nodes/Preferences) -->
+        <div id="settingsPage" class="page-content animate-fade-in hidden">
+          <div class="mb-10">
+            <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Configuration Hub</h1>
+            <p class="text-slate-500 text-sm mt-1">Adjust system parameters and communication protocols</p>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <!-- Navigation Mini-Sidebar -->
+            <div class="lg:col-span-3 space-y-1">
+              <button
+                class="w-full flex items-center gap-3 px-4 py-2.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 font-bold rounded-lg text-sm transition">
+                <i class="fas fa-sliders-h"></i> General
+              </button>
+              <button
+                class="w-full flex items-center gap-3 px-4 py-2.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-sm transition text-left">
+                <i class="fas fa-bell"></i> Notifications
+              </button>
+              <button
+                class="w-full flex items-center gap-3 px-4 py-2.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-sm transition text-left">
+                <i class="fas fa-shield-halved"></i> Privacy
+              </button>
+            </div>
+
+            <!-- Settings Content -->
+            <div class="lg:col-span-9 space-y-6">
+              <!-- General Preferences -->
+              <div
+                class="bg-white dark:bg-dark-card rounded-xl border border-slate-200 dark:border-dark-border shadow-sm overflow-hidden">
+                <div
+                  class="px-8 py-5 border-b border-slate-100 dark:border-dark-border bg-slate-50/50 dark:bg-slate-800/30">
+                  <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest">Localization & Environment</h3>
+                </div>
+                <div class="p-8 space-y-6">
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Display
+                        Language</label>
+                      <select id="settingLanguage"
+                        class="w-full px-4 py-2 border border-slate-200 dark:border-dark-border rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition appearance-none">
+                        <option value="en">English (Universal)</option>
+                        <option value="es">Español</option>
+                        <option value="fr">Français</option>
+                        <option value="de">Deutsch</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Temporal Zone
+                        (Timezone)</label>
+                      <select id="settingTimezone"
+                        class="w-full px-4 py-2 border border-slate-200 dark:border-dark-border rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition appearance-none">
+                        <option value="UTC">Coordinated Universal Time (UTC)</option>
+                        <option value="EST">Eastern Standard Time (EST)</option>
+                        <option value="CST">Central Standard Time (CST)</option>
+                        <option value="PST">Pacific Standard Time (PST)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label class="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Interface
+                        Mode</label>
+                      <select id="settingTheme"
+                        class="w-full px-4 py-2 border border-slate-200 dark:border-dark-border rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition appearance-none">
+                        <option value="light">Photon (Light)</option>
+                        <option value="dark">Void (Dark)</option>
+                        <option value="auto">System Adaptive</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="pt-6 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+                    <button onclick="window.updateSettings()"
+                      class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-8 rounded-lg shadow-lg shadow-indigo-100 dark:shadow-none transition transform active:scale-95">
+                      Apply Parameters
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Communication Protocol -->
+              <div
+                class="bg-white dark:bg-dark-card rounded-xl border border-slate-200 dark:border-dark-border shadow-sm overflow-hidden">
+                <div
+                  class="px-8 py-5 border-b border-slate-100 dark:border-dark-border bg-slate-50/50 dark:bg-slate-800/30">
+                  <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest">Communication Protocol</h3>
+                </div>
+                <div class="p-8 space-y-4">
+                  <div class="space-y-4">
+                    <label class="flex items-center group cursor-pointer">
+                      <div class="relative flex items-center">
+                        <input id="settingNotifications" type="checkbox" class="peer hidden">
+                        <div
+                          class="w-10 h-6 bg-slate-200 dark:bg-slate-700 peer-checked:bg-indigo-600 rounded-full transition-colors duration-200">
+                        </div>
+                        <div
+                          class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform duration-200 peer-checked:translate-x-4 shadow">
+                        </div>
+                      </div>
+                      <span class="ml-4 text-sm font-medium text-slate-600 dark:text-slate-300">Push notification
+                        broadcast</span>
+                    </label>
+                    <label class="flex items-center group cursor-pointer">
+                      <div class="relative flex items-center">
+                        <input id="settingEmailNotifs" type="checkbox" class="peer hidden">
+                        <div
+                          class="w-10 h-6 bg-slate-200 dark:bg-slate-700 peer-checked:bg-indigo-600 rounded-full transition-colors duration-200">
+                        </div>
+                        <div
+                          class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform duration-200 peer-checked:translate-x-4 shadow">
+                        </div>
+                      </div>
+                      <span class="ml-4 text-sm font-medium text-slate-600 dark:text-slate-300">Email summary
+                        reports</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Privacy & Security -->
+              <div
+                class="bg-white dark:bg-dark-card rounded-xl border border-slate-200 dark:border-dark-border shadow-sm overflow-hidden">
+                <div
+                  class="px-8 py-5 border-b border-slate-100 dark:border-dark-border bg-slate-50/50 dark:bg-slate-800/30">
+                  <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest">Visibility Protocol</h3>
+                </div>
+                <div class="p-8 space-y-4">
+                  <div class="space-y-4">
+                    <label class="flex items-center group cursor-pointer">
+                      <div class="relative flex items-center">
+                        <input id="privacyProfilePublic" type="checkbox" class="peer hidden">
+                        <div
+                          class="w-10 h-6 bg-slate-200 dark:bg-slate-700 peer-checked:bg-indigo-600 rounded-full transition-colors duration-200">
+                        </div>
+                        <div
+                          class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform duration-200 peer-checked:translate-x-4 shadow">
+                        </div>
+                      </div>
+                      <span class="ml-4 text-sm font-medium text-slate-600 dark:text-slate-300">Public profile
+                        indexing</span>
+                    </label>
+
+                    <label class="flex items-center group cursor-pointer">
+                      <div class="relative flex items-center">
+                        <input id="privacyShowEmail" type="checkbox" class="peer hidden">
+                        <div
+                          class="w-10 h-6 bg-slate-200 dark:bg-slate-700 peer-checked:bg-indigo-600 rounded-full transition-colors duration-200">
+                        </div>
+                        <div
+                          class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform duration-200 peer-checked:translate-x-4 shadow">
+                        </div>
+                      </div>
+                      <span class="ml-4 text-sm font-medium text-slate-600 dark:text-slate-300">Broadcast email
+                        address</span>
+                    </label>
+
+                    <label class="flex items-center group cursor-pointer">
+                      <div class="relative flex items-center">
+                        <input id="privacyShowLastSeen" type="checkbox" class="peer hidden">
+                        <div
+                          class="w-10 h-6 bg-slate-200 dark:bg-slate-700 peer-checked:bg-indigo-600 rounded-full transition-colors duration-200">
+                        </div>
+                        <div
+                          class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform duration-200 peer-checked:translate-x-4 shadow">
+                        </div>
+                      </div>
+                      <span class="ml-4 text-sm font-medium text-slate-600 dark:text-slate-300">Telemetry (Last Seen)
+                        broadcast</span>
+                    </label>
+                  </div>
+
+                  <div class="pt-6 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+                    <button onclick="window.updatePrivacy()"
+                      class="text-indigo-600 dark:text-indigo-400 font-bold hover:bg-indigo-50 dark:hover:bg-indigo-900/10 py-2 px-6 rounded-lg transition">
+                      Commit Privacy Changes
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Danger Zone -->
+              <div class="bg-rose-50 dark:bg-rose-900/10 rounded-xl border border-rose-100 dark:border-rose-900/30 p-8">
+                <h3 class="text-rose-600 dark:text-rose-400 font-bold mb-2">Critical Actions</h3>
+                <p class="text-rose-500/70 text-sm mb-6">Permanent account deconstruction. This action is IRREVERSIBLE.
+                </p>
+                <button onclick="window.deleteAccount()"
+                  class="bg-rose-600 hover:bg-rose-700 text-white font-bold py-2.5 px-6 rounded-lg transition active:scale-95 shadow-lg shadow-rose-200 dark:shadow-none">
+                  Terminate Node (Delete Account)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script type="module" src="main.js"></script>
+</body>
+
+</html>
