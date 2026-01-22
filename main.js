@@ -235,7 +235,18 @@ const loadSettingsData = async () => {
 // ===============================
 window.toggleSidebar = () => {
   const sidebar = document.getElementById('sidebarContainer');
-  sidebar?.classList.toggle('minimized');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  const isMobile = window.innerWidth < 1024;
+
+  if (isMobile) {
+    sidebar?.classList.toggle('mobile-open');
+    backdrop?.classList.toggle('active');
+    sidebar?.classList.remove('minimized');
+  } else {
+    sidebar?.classList.toggle('minimized');
+    sidebar?.classList.remove('mobile-open');
+    backdrop?.classList.remove('active');
+  }
 };
 
 window.handleGlobalSearch = async (query) => {
@@ -362,6 +373,12 @@ window.navigateTo = (page) => {
 
   const breadcrumb = document.getElementById('breadcrumbCurrent');
 
+  // Save active page for persistence
+  localStorage.setItem('activePage', page);
+
+  // Close chat on mobile when navigating
+  window.closeChat();
+
   if (page === 'dashboard') {
     document.getElementById('dashboardPage')?.classList.remove('hidden');
     document.querySelectorAll('.nav-btn')[0]?.classList.add('active');
@@ -385,6 +402,14 @@ window.navigateTo = (page) => {
     document.getElementById('logsPage')?.classList.remove('hidden');
     if (breadcrumb) breadcrumb.textContent = 'Protocol Logs';
     window.loadAllLogs();
+  }
+
+  // Close sidebar on mobile after navigation
+  if (window.innerWidth < 1024) {
+    const sidebar = document.getElementById('sidebarContainer');
+    const backdrop = document.getElementById('sidebarBackdrop');
+    sidebar?.classList.remove('mobile-open');
+    backdrop?.classList.remove('active');
   }
 
   console.log('Navigated to page', { page });
@@ -504,10 +529,22 @@ let unsubscribeTyping = null;
 let usersCache = [];
 let typingTimeout = null;
 
+let unsubscribeRooms = null;
+let roomsCache = {};
+
 window.loadUsers = () => {
   if (!AppState.currentUser) return;
   if (unsubscribeUsers) return;
 
+  // Listen to chat rooms for metadata
+  unsubscribeRooms = ChatService.onChatRoomsChange(AppState.currentUser.uid, (rooms) => {
+    roomsCache = rooms;
+    if (usersCache.length > 0) {
+      window.displayUsers(usersCache);
+    }
+  });
+
+  // Listen to users
   unsubscribeUsers = ChatService.onUsersChange(AppState.currentUser.uid, (users) => {
     usersCache = users;
     window.displayUsers(users);
@@ -525,9 +562,24 @@ window.displayUsers = (users) => {
   const usersList = document.getElementById('usersList');
   if (!usersList) return;
 
-  usersList.innerHTML = users.map(user => `
+  // Map users with room metadata
+  const usersWithMetadata = users.map(user => {
+    const roomId = ChatService.generateChatRoomId(AppState.currentUser.uid, user.uid);
+    const room = roomsCache[roomId] || {};
+    return {
+      ...user,
+      lastMessageTime: room.lastMessageTime?.toDate?.() || new Date(0),
+      unreadCount: room[`unreadCount_${AppState.currentUser.uid}`] || 0,
+      lastMessage: room.lastMessage || 'No messages yet'
+    };
+  });
+
+  // Sort by last message time (descending)
+  usersWithMetadata.sort((a, b) => b.lastMessageTime - a.lastMessageTime);
+
+  usersList.innerHTML = usersWithMetadata.map(user => `
     <div onclick="window.openChat('${user.uid}')" 
-      class="p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors group">
+      class="p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors group relative">
       <div class="flex items-center gap-3">
         <div class="relative shrink-0">
           <img src="${user.profilePicture || 'https://www.w3schools.com/howto/img_avatar.png'}" 
@@ -537,9 +589,18 @@ window.displayUsers = (users) => {
         <div class="flex-1 min-w-0">
           <div class="flex justify-between items-baseline mb-0.5">
             <p class="font-bold text-slate-900 dark:text-white truncate text-sm">${Validators.escapeHTML(user.displayName)}</p>
-            <span class="text-[10px] text-slate-400 font-medium">Online</span>
+            <span class="text-[10px] text-slate-400 font-medium">${user.unreadCount > 0 ? '' : 'Online'}</span>
           </div>
-          <p class="text-xs text-slate-500 truncate font-medium">ID: ${Validators.escapeHTML(user.email.split('@')[0])}...</p>
+          <div class="flex justify-between items-center">
+            <p class="text-xs ${user.unreadCount > 0 ? 'text-indigo-600 dark:text-indigo-400 font-bold' : 'text-slate-500'} truncate flex-1">
+              ${Validators.escapeHTML(user.lastMessage)}
+            </p>
+            ${user.unreadCount > 0 ? `
+              <span class="ml-2 w-5 h-5 bg-indigo-600 text-white text-[10px] flex items-center justify-center rounded-full font-bold animate-bounce">
+                ${user.unreadCount}
+              </span>
+            ` : ''}
+          </div>
         </div>
       </div>
     </div>
@@ -547,7 +608,13 @@ window.displayUsers = (users) => {
 };
 
 window.openChat = async (userId) => {
-  window.navigateTo('chat');
+  const isMobile = window.innerWidth < 1024;
+  const chatPage = document.getElementById('chatPage');
+
+  if (chatPage && chatPage.classList.contains('hidden')) {
+    window.navigateTo('chat');
+  }
+
   const user = usersCache.find(u => u.uid === userId);
   if (!user) {
     // Fallback if not in cache (e.g. initial load)
@@ -566,6 +633,16 @@ window.openChat = async (userId) => {
 
   // Update header immediately
   window.updateChatHeader(currentChatUser);
+
+  // Show conversation on mobile
+  if (isMobile) {
+    const chatMain = document.getElementById('chatMain');
+    if (chatMain) {
+      chatMain.classList.remove('translate-x-full');
+      chatMain.style.transform = 'translateX(0)'; // Force immediate transform
+    }
+    document.body.style.overflow = 'hidden'; // Lock scroll
+  }
 
   // Unsubscribe from previous listeners
   if (unsubscribeChat) unsubscribeChat();
@@ -588,6 +665,17 @@ window.openChat = async (userId) => {
   unsubscribeTyping = ChatService.onTypingStatusChange(AppState.currentUser.uid, userId, userId, (isTyping) => {
     window.updateChatHeader(currentChatUser, isTyping);
   });
+};
+
+window.closeChat = () => {
+  if (window.innerWidth < 1024) {
+    const chatMain = document.getElementById('chatMain');
+    if (chatMain) {
+      chatMain.classList.add('translate-x-full');
+      chatMain.style.transform = ''; // Clear forced transform
+    }
+    document.body.style.overflow = ''; // Unlock scroll
+  }
 };
 
 window.handleTyping = () => {
@@ -630,6 +718,11 @@ window.updateChatHeader = (user, isTyping = false) => {
   }
 };
 
+window.openAttachment = (data) => {
+  const win = window.open();
+  win.document.write(`<img src="${data}" style="max-width: 100%; height: auto;">`);
+};
+
 window.displayMessages = (messages) => {
   const chatMessages = document.getElementById('chatMessages');
   if (!chatMessages) return;
@@ -641,22 +734,49 @@ window.displayMessages = (messages) => {
 
   chatMessages.innerHTML = messages.map(msg => {
     const timestamp = msg.timestamp?.toDate?.() || new Date(msg.timestamp);
-    const timeString = timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const isOwn = msg.senderId === AppState.currentUser.uid;
+    const timeStr = timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const isMe = msg.senderId === AppState.currentUser.uid;
+
+    let attachmentHtml = '';
+    if (msg.attachment) {
+      if (msg.attachment.type.startsWith('image/')) {
+        attachmentHtml = `
+            <div class="mt-2 rounded-lg overflow-hidden border border-slate-200 dark:border-dark-border cursor-pointer">
+              <img src="${msg.attachment.data}" alt="${msg.attachment.name}" class="max-w-full max-h-60 object-cover" 
+                   onclick="window.openAttachment('${msg.attachment.data}')">
+            </div>
+          `;
+      } else {
+        attachmentHtml = `
+            <div class="mt-2 p-3 bg-white/50 dark:bg-black/20 rounded-lg flex items-center gap-3 border border-slate-200/50 dark:border-white/5">
+              <div class="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/40 rounded flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                <i class="fas fa-file-download text-lg"></i>
+              </div>
+              <div class="overflow-hidden">
+                <p class="text-[11px] font-bold text-slate-700 dark:text-white truncate">${Validators.escapeHTML(msg.attachment.name)}</p>
+                <p class="text-[9px] text-slate-500">${msg.attachment.size}</p>
+                <a href="${msg.attachment.data}" download="${msg.attachment.name}" class="text-[9px] text-indigo-600 dark:text-indigo-400 font-bold hover:underline">DOWNLOAD RESOURCE</a>
+              </div>
+            </div>
+          `;
+      }
+    }
 
     return `
-    <div class="flex ${isOwn ? 'justify-end' : 'justify-start'} animate-fade-in group">
-      <div class="flex flex-col ${isOwn ? 'items-end' : 'items-start'} max-w-[80%]">
-        <div class="${isOwn ? 'bg-indigo-600 text-white shadow-indigo-200 shadow-md rounded-2xl rounded-tr-none' : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-100 dark:border-slate-700 rounded-2xl rounded-tl-none shadow-sm'} px-4 py-2.5">
-          <p class="text-sm leading-relaxed">${Validators.escapeHTML(msg.message)}</p>
+        <div class="flex ${isMe ? 'justify-end' : 'justify-start'} animate-slide-up">
+          <div class="max-w-[80%] ${isMe ? 'items-end' : 'items-start'} flex flex-col gap-1">
+            <div class="${isMe ? 'bg-indigo-600 text-white rounded-2xl rounded-tr-none' : 'bg-white dark:bg-dark-card text-slate-800 dark:text-slate-200 border border-slate-100 dark:border-dark-border rounded-2xl rounded-tl-none'} p-3 shadow-sm shadow-slate-200/50 dark:shadow-none">
+              ${msg.message ? `<p class="text-sm font-medium leading-relaxed">${Validators.escapeHTML(msg.message)}</p>` : ''}
+              ${attachmentHtml}
+            </div>
+            <div class="flex items-center gap-1.5 px-1">
+              <span class="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">${timeStr}</span>
+              ${isMe ? `<i class="fas ${msg.read ? 'fa-check-double text-indigo-500' : 'fa-check text-slate-300'} text-[8px]"></i>` : ''}
+            </div>
+          </div>
         </div>
-        <div class="flex items-center gap-2 mt-1.5 px-1">
-          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">${timeString}</p>
-          ${isOwn ? '<i class="fas fa-check-double text-[10px] text-indigo-400"></i>' : ''}
-        </div>
-      </div>
-    </div>
-  `}).join('');
+      `;
+  }).join('');
 
   // Auto scroll to bottom
   setTimeout(() => {
@@ -664,17 +784,59 @@ window.displayMessages = (messages) => {
   }, 0);
 };
 
+let selectedAttachment = null;
+
+window.handleChatAttachmentSelect = (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  if (file.size > 800 * 1024) {
+    UIHelper.showAlert('File must be less than 800KB for Firestore storage', 'error');
+    event.target.value = '';
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    selectedAttachment = {
+      name: file.name,
+      size: (file.size / 1024).toFixed(1) + ' KB',
+      type: file.type,
+      data: e.target.result
+    };
+
+    document.getElementById('attachmentName').textContent = selectedAttachment.name;
+    document.getElementById('attachmentSize').textContent = selectedAttachment.size;
+    document.getElementById('attachmentPreview').classList.remove('hidden');
+  };
+  reader.readAsDataURL(file);
+};
+
+window.clearChatAttachment = () => {
+  selectedAttachment = null;
+  const input = document.getElementById('chatAttachmentInput');
+  if (input) input.value = '';
+  document.getElementById('attachmentPreview').classList.add('hidden');
+};
+
 window.sendMessage = async () => {
   try {
     if (!currentChatUser || !AppState.currentUser) return;
 
     const input = document.getElementById('messageInput');
-    const message = input.value.trim();
+    const text = input.value.trim();
 
-    if (!message) return;
+    if (!text && !selectedAttachment) return;
 
-    await ChatService.sendMessage(AppState.currentUser.uid, currentChatUser.uid, message);
+    const messageData = {
+      text: text,
+      attachment: selectedAttachment
+    };
+
+    await ChatService.sendMessage(AppState.currentUser.uid, currentChatUser.uid, messageData);
+
     input.value = '';
+    window.clearChatAttachment();
   } catch (error) {
     console.error('Failed to send message', error);
     UIHelper.showAlert('Failed to send message', 'error');

@@ -39,7 +39,18 @@ export const AppState = {
       try {
         const profile = await window.UserService.getUserProfile(this.currentUser.uid);
         this.setUserProfile(profile);
-        this.showPage('dashboardContainer');
+
+        // Restore last active page or default to dashboard
+        const savedPage = localStorage.getItem('activePage') || 'dashboard';
+        this.showPage('dashboardContainer'); // Container must be visible first
+
+        // Use a small timeout to ensure DOM is ready for navigateTo sub-page logic
+        setTimeout(() => {
+          if (window.navigateTo) {
+            window.navigateTo(savedPage);
+          }
+        }, 100);
+
         await this.updateDashboard(profile);
       } catch (error) {
         console.error('Failed to update UI', error);

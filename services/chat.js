@@ -72,8 +72,9 @@ export const ChatService = {
   },
 
   // Send a message
-  async sendMessage(senderId, recipientId, message) {
+  async sendMessage(senderId, recipientId, messageData) {
     try {
+      const message = messageData.text || '';
       const chatRoomId = this.generateChatRoomId(senderId, recipientId);
       const messagesRef = collection(db, 'chats', chatRoomId, 'messages');
 
@@ -81,28 +82,33 @@ export const ChatService = {
         senderId,
         recipientId,
         message,
+        attachment: messageData.attachment || null,
         timestamp: serverTimestamp(),
         read: false
       });
 
-      // Update chat room last message
+      // Update chat room metadata for sorting and unread counts
       const chatRoomRef = doc(db, 'chats', chatRoomId);
-      await updateDoc(chatRoomRef, {
+      const chatRoomSnap = await getDoc(chatRoomRef);
+
+      const metadata = {
         lastMessage: message,
         lastMessageTime: serverTimestamp(),
-        lastMessageSenderId: senderId
-      }).catch(() => {
-        // If doc doesn't exist, create it
-        return setDoc(chatRoomRef, {
-          participants: [senderId, recipientId],
-          lastMessage: message,
-          lastMessageTime: serverTimestamp(),
-          lastMessageSenderId: senderId,
-          createdAt: serverTimestamp()
-        });
-      });
+        lastMessageSenderId: senderId,
+        participants: [senderId, recipientId]
+      };
 
-      console.log('Message sent successfully');
+      // Increment unread count for the recipient
+      metadata[`unreadCount_${recipientId}`] = (chatRoomSnap.exists() ? (chatRoomSnap.data()[`unreadCount_${recipientId}`] || 0) : 0) + 1;
+
+      if (chatRoomSnap.exists()) {
+        await updateDoc(chatRoomRef, metadata);
+      } else {
+        metadata.createdAt = serverTimestamp();
+        await setDoc(chatRoomRef, metadata);
+      }
+
+      console.log('Message sent successfully with metadata');
     } catch (error) {
       console.error('Failed to send message', error);
       throw error;
@@ -158,15 +164,22 @@ export const ChatService = {
     }
   },
 
-  // Mark messages as read - ASYNC operation
-  async markMessagesAsRead(senderId, recipientId, recipientUserId) {
+  // Mark messages as read and reset unread count
+  async markMessagesAsRead(senderId, recipientId, currentUserId) {
     try {
       const chatRoomId = this.generateChatRoomId(senderId, recipientId);
+
+      // 1. Reset unread count in chat room doc
+      const chatRoomRef = doc(db, 'chats', chatRoomId);
+      const updateData = {};
+      updateData[`unreadCount_${currentUserId}`] = 0;
+      await updateDoc(chatRoomRef, updateData).catch(e => console.warn('Chat room update failed', e));
+
+      // 2. Mark individual messages as read
       const messagesRef = collection(db, 'chats', chatRoomId, 'messages');
-      const q = query(messagesRef, where('recipientId', '==', recipientUserId), where('read', '==', false));
+      const q = query(messagesRef, where('recipientId', '==', currentUserId), where('read', '==', false));
 
       const snapshot = await getDocs(q);
-
       snapshot.forEach(async (docSnap) => {
         await updateDoc(doc(db, 'chats', chatRoomId, 'messages', docSnap.id), {
           read: true
@@ -174,6 +187,23 @@ export const ChatService = {
       });
     } catch (error) {
       console.error('Failed to mark messages as read', error);
+    }
+  },
+
+  // Listen for chat rooms the user is part of
+  onChatRoomsChange(currentUserId, callback) {
+    try {
+      const q = query(collection(db, 'chats'), where('participants', 'array-contains', currentUserId));
+      return onSnapshot(q, (snapshot) => {
+        const rooms = {};
+        snapshot.forEach(doc => {
+          rooms[doc.id] = { id: doc.id, ...doc.data() };
+        });
+        callback(rooms);
+      });
+    } catch (e) {
+      console.error('Failed to listen to chat rooms', e);
+      return null;
     }
   },
 
