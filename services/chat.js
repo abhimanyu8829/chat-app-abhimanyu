@@ -87,12 +87,17 @@ export const ChatService = {
         read: false
       });
 
+      console.log('Message document created in Firestore for room:', chatRoomId);
+
       // Update chat room metadata for sorting and unread counts
       const chatRoomRef = doc(db, 'chats', chatRoomId);
       const chatRoomSnap = await getDoc(chatRoomRef);
 
+      // Use a friendly placeholder for the sidebar list if only an attachment was sent
+      const lastMessageText = messageData.lastMessageDisplay || message || (messageData.attachment ? '[Attachment]' : 'New message');
+
       const metadata = {
-        lastMessage: message,
+        lastMessage: lastMessageText,
         lastMessageTime: serverTimestamp(),
         lastMessageSenderId: senderId,
         participants: [senderId, recipientId]
@@ -108,7 +113,7 @@ export const ChatService = {
         await setDoc(chatRoomRef, metadata);
       }
 
-      console.log('Message sent successfully with metadata');
+      console.log('Chat room metadata synchronized successfully.');
     } catch (error) {
       console.error('Failed to send message', error);
       throw error;

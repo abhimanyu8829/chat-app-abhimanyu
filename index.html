@@ -942,7 +942,7 @@
               <div class="p-4 bg-white dark:bg-dark-card border-t border-slate-100 dark:border-dark-border">
                 <!-- Attachment Preview -->
                 <div id="attachmentPreview"
-                  class="hidden mb-3 p-2 bg-slate-50 dark:bg-slate-800 rounded-lg flex items-center justify-between border border-slate-200 dark:border-slate-700">
+                  class="hidden mb-3 p-3 bg-indigo-50 dark:bg-indigo-900/10 rounded-xl flex items-center justify-between border border-indigo-100 dark:border-indigo-900/30 animate-slide-up">
                   <div class="flex items-center gap-3 overflow-hidden">
                     <div
                       class="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/30 rounded flex items-center justify-center text-indigo-600 dark:text-indigo-400">
@@ -950,10 +950,11 @@
                     </div>
                     <div class="overflow-hidden">
                       <p id="attachmentName" class="text-xs font-bold text-slate-700 dark:text-slate-200 truncate"></p>
-                      <p id="attachmentSize" class="text-[10px] text-slate-500"></p>
+                      <p id="attachmentSize" class="text-[10px] text-slate-500 font-medium"></p>
                     </div>
                   </div>
-                  <button onclick="window.clearChatAttachment()" class="text-slate-400 hover:text-rose-500 p-1">
+                  <button onclick="window.clearChatAttachment()"
+                    class="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-colors">
                     <i class="fas fa-times"></i>
                   </button>
                 </div>

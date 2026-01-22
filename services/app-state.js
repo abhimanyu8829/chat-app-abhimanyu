@@ -7,6 +7,7 @@ export const AppState = {
   userProfile: null,
   isLoading: false,
   currentPage: 'auth',
+  currentChatUser: null,
 
   setLoading(state) {
     this.isLoading = state;
@@ -123,27 +124,37 @@ export const AppState = {
     try {
       const activities = await window.UserService.getActivityLog(profile.uid, 10);
       const activityFeed = document.getElementById('activityFeed');
-      if (activityFeed && activities.length > 0) {
-        activityFeed.innerHTML = activities.map(act => {
-          const timestamp = act.timestamp?.toDate?.() || new Date(act.timestamp);
-          const timeLabel = this.formatTimeAgo(timestamp);
-          const icon = this.getActivityIcon(act.type);
+      if (activityFeed) {
+        if (activities.length > 0) {
+          activityFeed.innerHTML = activities.map(act => {
+            const timestamp = act.timestamp?.toDate?.() || new Date(act.timestamp);
+            const timeLabel = this.formatTimeAgo(timestamp);
+            const icon = this.getActivityIcon(act.type);
 
-          return `
-            <div class="flex gap-4 animate-fade-in">
-              <div class="relative shrink-0">
-                <div class="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center">
-                  <i class="fas ${icon} text-slate-500"></i>
+            return `
+              <div class="flex gap-4 animate-fade-in">
+                <div class="relative shrink-0">
+                  <div class="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center">
+                    <i class="fas ${icon} text-slate-500"></i>
+                  </div>
+                </div>
+                <div>
+                  <p class="text-sm font-semibold text-slate-900 dark:text-white">${this.formatActivityTitle(act.type)}</p>
+                  <p class="text-xs text-slate-500 mt-1">${this.formatActivityDetails(act)}</p>
+                  <p class="text-[10px] text-slate-400 mt-2 font-medium uppercase tracking-tighter">${timeLabel}</p>
                 </div>
               </div>
-              <div>
-                <p class="text-sm font-semibold text-slate-900 dark:text-white">${this.formatActivityTitle(act.type)}</p>
-                <p class="text-xs text-slate-500 mt-1">${this.formatActivityDetails(act)}</p>
-                <p class="text-[10px] text-slate-400 mt-2 font-medium uppercase tracking-tighter">${timeLabel}</p>
-              </div>
+            `;
+          }).join('');
+        } else {
+          activityFeed.innerHTML = `
+            <div class="flex flex-col items-center justify-center py-10 opacity-40">
+              <i class="fas fa-history text-4xl mb-3"></i>
+              <p class="text-sm font-medium">No recent activity recorded</p>
+              <p class="text-[10px] uppercase tracking-widest mt-1">Audit stream is empty</p>
             </div>
           `;
-        }).join('');
+        }
       }
     } catch (error) {
       console.error('Failed to update activity feed', error);

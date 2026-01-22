@@ -522,7 +522,6 @@ window.deleteAccount = () => AuthService.deleteAccount();
 // ===============================
 // CHAT FUNCTIONS
 // ===============================
-let currentChatUser = null;
 let unsubscribeChat = null;
 let unsubscribeUsers = null;
 let unsubscribeTyping = null;
@@ -549,8 +548,8 @@ window.loadUsers = () => {
     usersCache = users;
     window.displayUsers(users);
 
-    if (currentChatUser) {
-      const updatedUser = users.find(u => u.uid === currentChatUser.uid);
+    if (AppState.currentChatUser) {
+      const updatedUser = users.find(u => u.uid === AppState.currentChatUser.uid);
       if (updatedUser) {
         window.updateChatHeader(updatedUser);
       }
@@ -577,39 +576,49 @@ window.displayUsers = (users) => {
   // Sort by last message time (descending)
   usersWithMetadata.sort((a, b) => b.lastMessageTime - a.lastMessageTime);
 
-  usersList.innerHTML = usersWithMetadata.map(user => `
-    <div onclick="window.openChat('${user.uid}')" 
-      class="p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors group relative">
-      <div class="flex items-center gap-3">
-        <div class="relative shrink-0">
-          <img src="${user.profilePicture || 'https://www.w3schools.com/howto/img_avatar.png'}" 
-               class="w-12 h-12 rounded-xl object-cover border-2 border-transparent group-hover:border-indigo-100 dark:group-hover:border-indigo-900 transition-all">
-          <div class="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-white dark:border-dark-card rounded-full"></div>
-        </div>
-        <div class="flex-1 min-w-0">
-          <div class="flex justify-between items-baseline mb-0.5">
-            <p class="font-bold text-slate-900 dark:text-white truncate text-sm">${Validators.escapeHTML(user.displayName)}</p>
-            <span class="text-[10px] text-slate-400 font-medium">${user.unreadCount > 0 ? '' : 'Online'}</span>
+  usersList.innerHTML = usersWithMetadata.map(user => {
+    const isActive = AppState.currentChatUser && AppState.currentChatUser.uid === user.uid;
+
+    return `
+      <div onclick="window.openChat('${user.uid}')" 
+        class="p-4 ${isActive ? 'bg-indigo-50 dark:bg-indigo-900/20 border-r-4 border-indigo-600' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'} cursor-pointer transition-all group relative">
+        <div class="flex items-center gap-3">
+          <div class="relative shrink-0">
+            <img src="${user.profilePicture || 'https://www.w3schools.com/howto/img_avatar.png'}" 
+                 class="w-12 h-12 rounded-xl object-cover border-2 ${isActive ? 'border-indigo-200 dark:border-indigo-800' : 'border-transparent group-hover:border-indigo-100 dark:group-hover:border-indigo-900'} transition-all">
+            <div class="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-white dark:border-dark-card rounded-full"></div>
           </div>
-          <div class="flex justify-between items-center">
-            <p class="text-xs ${user.unreadCount > 0 ? 'text-indigo-600 dark:text-indigo-400 font-bold' : 'text-slate-500'} truncate flex-1">
-              ${Validators.escapeHTML(user.lastMessage)}
-            </p>
-            ${user.unreadCount > 0 ? `
-              <span class="ml-2 w-5 h-5 bg-indigo-600 text-white text-[10px] flex items-center justify-center rounded-full font-bold animate-bounce">
-                ${user.unreadCount}
-              </span>
-            ` : ''}
+          <div class="flex-1 min-w-0">
+            <div class="flex justify-between items-baseline mb-0.5">
+              <p class="font-bold ${isActive ? 'text-indigo-900 dark:text-white' : 'text-slate-900 dark:text-white'} truncate text-sm">${Validators.escapeHTML(user.displayName)}</p>
+              <span class="text-[10px] text-slate-400 font-medium">${user.unreadCount > 0 ? '' : 'Online'}</span>
+            </div>
+            <div class="flex justify-between items-center">
+              <p class="text-xs ${user.unreadCount > 0 || isActive ? 'text-indigo-600 dark:text-indigo-400 font-bold' : 'text-slate-500'} truncate flex-1">
+                ${Validators.escapeHTML(user.lastMessage)}
+              </p>
+              ${user.unreadCount > 0 ? `
+                <span class="ml-2 w-5 h-5 bg-indigo-600 text-white text-[10px] flex items-center justify-center rounded-full font-bold animate-bounce">
+                  ${user.unreadCount}
+                </span>
+              ` : ''}
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 };
 
 window.openChat = async (userId) => {
+  console.log('Initiating handshake with identity:', userId);
   const isMobile = window.innerWidth < 1024;
   const chatPage = document.getElementById('chatPage');
+
+  if (!userId) {
+    console.warn('Handshake failed: No identity specified.');
+    return;
+  }
 
   if (chatPage && chatPage.classList.contains('hidden')) {
     window.navigateTo('chat');
@@ -620,9 +629,9 @@ window.openChat = async (userId) => {
     // Fallback if not in cache (e.g. initial load)
     const profile = await UserService.getUserProfile(userId);
     if (!profile) return;
-    currentChatUser = profile;
+    AppState.currentChatUser = profile;
   } else {
-    currentChatUser = user;
+    AppState.currentChatUser = user;
   }
 
   // Show loading state
@@ -632,7 +641,7 @@ window.openChat = async (userId) => {
   }
 
   // Update header immediately
-  window.updateChatHeader(currentChatUser);
+  window.updateChatHeader(AppState.currentChatUser);
 
   // Show conversation on mobile
   if (isMobile) {
@@ -679,17 +688,17 @@ window.closeChat = () => {
 };
 
 window.handleTyping = () => {
-  if (!currentChatUser) return;
+  if (!AppState.currentChatUser) return;
 
   // Broadcast typing status
-  ChatService.setTypingStatus(AppState.currentUser.uid, currentChatUser.uid, true);
+  ChatService.setTypingStatus(AppState.currentUser.uid, AppState.currentChatUser.uid, true);
 
   // Clear previous timeout
   if (typingTimeout) clearTimeout(typingTimeout);
 
   // Set timeout to stop typing status after 3 seconds of inactivity
   typingTimeout = setTimeout(() => {
-    ChatService.setTypingStatus(AppState.currentUser.uid, currentChatUser.uid, false);
+    ChatService.setTypingStatus(AppState.currentUser.uid, AppState.currentChatUser.uid, false);
   }, 3000);
 };
 
@@ -790,8 +799,9 @@ window.handleChatAttachmentSelect = (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
 
-  if (file.size > 800 * 1024) {
-    UIHelper.showAlert('File must be less than 800KB for Firestore storage', 'error');
+  // New limit: 750KB (Base64 overhead fits within 1MB Firestore limit)
+  if (file.size > 750 * 1024) {
+    UIHelper.showAlert('File must be less than 750KB to ensure secure transmission', 'error');
     event.target.value = '';
     return;
   }
@@ -802,8 +812,13 @@ window.handleChatAttachmentSelect = (event) => {
       name: file.name,
       size: (file.size / 1024).toFixed(1) + ' KB',
       type: file.type,
-      data: e.target.result
+      data: e.target.result, // base64 for local preview
+      file: file // raw file for Storage upload
     };
+
+    if (file.size > 1024 * 1024) {
+      selectedAttachment.size = (file.size / (1024 * 1024)).toFixed(2) + ' MB';
+    }
 
     document.getElementById('attachmentName').textContent = selectedAttachment.name;
     document.getElementById('attachmentSize').textContent = selectedAttachment.size;
@@ -820,26 +835,71 @@ window.clearChatAttachment = () => {
 };
 
 window.sendMessage = async () => {
+  const sendBtn = document.querySelector('button[onclick="window.sendMessage()"]');
+  const sendIcon = sendBtn?.querySelector('i');
+
   try {
-    if (!currentChatUser || !AppState.currentUser) return;
+    if (!AppState.currentChatUser || !AppState.currentUser) {
+      UIHelper.showAlert('Please select a recipient from the terminal directory first.', 'warning');
+      return;
+    }
 
     const input = document.getElementById('messageInput');
     const text = input.value.trim();
 
     if (!text && !selectedAttachment) return;
 
+    // Loading state
+    if (sendBtn) sendBtn.disabled = true;
+    if (sendIcon) {
+      sendIcon.className = 'fas fa-spinner fa-spin';
+    }
+
+    let attachmentData = null;
+    if (selectedAttachment) {
+      console.log('Initiating resource transmission...', selectedAttachment.name);
+      UIHelper.showAlert('Transmitting resource to cloud node...', 'success');
+
+      const storagePath = `chats/${AppState.currentUser.uid}/${Date.now()}_${selectedAttachment.name}`;
+      const storageRef = ref(storage, storagePath);
+
+      const snapshot = await uploadBytes(storageRef, selectedAttachment.file);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+
+      console.log('Resource synchronized successfully:', downloadURL);
+
+      attachmentData = {
+        name: selectedAttachment.name,
+        size: selectedAttachment.size,
+        type: selectedAttachment.type,
+        data: downloadURL
+      };
+    }
+
     const messageData = {
       text: text,
-      attachment: selectedAttachment
+      attachment: attachmentData
     };
 
-    await ChatService.sendMessage(AppState.currentUser.uid, currentChatUser.uid, messageData);
+    // If no text but has attachment, set a placeholder for last message metadata
+    const lastDisplayMessage = text || (attachmentData ? `[Attachment: ${attachmentData.name}]` : '');
+
+    await ChatService.sendMessage(AppState.currentUser.uid, AppState.currentChatUser.uid, {
+      ...messageData,
+      lastMessageDisplay: lastDisplayMessage // Helpful for sorting
+    });
 
     input.value = '';
     window.clearChatAttachment();
+    console.log('Full message packet synchronized.');
   } catch (error) {
-    console.error('Failed to send message', error);
-    UIHelper.showAlert('Failed to send message', 'error');
+    console.error('Handshake/Transmission Error:', error);
+    UIHelper.showAlert('Communication failure: ' + (error.message || 'System offline'), 'error');
+  } finally {
+    if (sendBtn) sendBtn.disabled = false;
+    if (sendIcon) {
+      sendIcon.className = 'fas fa-paper-plane text-lg translate-x-0.5';
+    }
   }
 };
 

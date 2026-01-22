@@ -34,6 +34,12 @@ import {
   addDoc,
   onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
+import {
+  getStorage,
+  ref,
+  uploadBytes,
+  getDownloadURL
+} from "https://www.gstatic.com/firebasejs/10.7.0/firebase-storage.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBgff4O1C1GTzLEAFXzwgI5Qqa8F_fm-XI",
